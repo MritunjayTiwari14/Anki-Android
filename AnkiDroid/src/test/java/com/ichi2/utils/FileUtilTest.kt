@@ -15,17 +15,18 @@
  */
 package com.ichi2.utils
 
+import com.ichi2.testutils.common.assertThrows
 import org.acra.util.IOUtils.writeStringToFile
-import org.hamcrest.CoreMatchers
+import org.hamcrest.CoreMatchers.nullValue
 import org.hamcrest.MatcherAssert.assertThat
 import org.hamcrest.core.IsEqual.equalTo
-import org.junit.Assert.assertThrows
 import org.junit.Rule
 import org.junit.Test
 import org.junit.rules.TemporaryFolder
 import java.io.File
 import java.io.IOException
 import kotlin.test.assertEquals
+import kotlin.test.assertNotNull
 import kotlin.test.assertTrue
 
 class FileUtilTest {
@@ -79,35 +80,76 @@ class FileUtilTest {
         assertEquals(expectedChildren.size.toLong(), testDirChildren.size.toLong())
 
         // Create invalid input
-        assertThrows(IOException::class.java) { FileUtil.listFiles(File(testDir, "file1.txt")) }
-    }
-
-    @Test
-    fun testFileNameNull() {
-        assertThat(FileUtil.getFileNameAndExtension(null), CoreMatchers.nullValue())
+        assertThrows<IOException> { FileUtil.listFiles(File(testDir, "file1.txt")) }
     }
 
     @Test
     fun testFileNameEmpty() {
-        assertThat(FileUtil.getFileNameAndExtension(""), CoreMatchers.nullValue())
+        assertThat(FileNameAndExtension.fromString(""), nullValue())
     }
 
     @Test
     fun testFileNameNoDot() {
-        assertThat(FileUtil.getFileNameAndExtension("abc"), CoreMatchers.nullValue())
+        assertThat(FileNameAndExtension.fromString("abc"), nullValue())
     }
 
     @Test
     fun testFileNameNormal() {
-        val fileNameAndExtension = FileUtil.getFileNameAndExtension("abc.jpg")
-        assertThat(fileNameAndExtension!!.key, equalTo("abc"))
-        assertThat(fileNameAndExtension.value, equalTo(".jpg"))
+        val (fileName, extension) = getValidFileNameAndExtension("abc.jpg")
+        assertThat(fileName, equalTo("abc"))
+        assertThat(extension, equalTo(".jpg"))
     }
 
     @Test
     fun testFileNameTwoDot() {
-        val fileNameAndExtension = FileUtil.getFileNameAndExtension("a.b.c")
-        assertThat(fileNameAndExtension!!.key, equalTo("a.b"))
-        assertThat(fileNameAndExtension.value, equalTo(".c"))
+        val (fileName, extension) = getValidFileNameAndExtension("a.b.c")
+        assertThat(fileName, equalTo("a.b"))
+        assertThat(extension, equalTo(".c"))
     }
+
+    @Test
+    fun `test create temp file - dot`() {
+        val fileNameAndExtension = getValidFileNameAndExtension("a.b.c")
+        File.createTempFile(fileNameAndExtension.fileName, fileNameAndExtension.extensionWithDot)
+    }
+
+    @Test
+    fun `test create temp file - too short`() {
+        // createTempFile fails with a 2-character filename
+        val invalidTempFile = getValidFileNameAndExtension("ok.computer")
+        assertThrows<IllegalArgumentException> {
+            File.createTempFile(invalidTempFile.fileName, invalidTempFile.extensionWithDot)
+        }
+        val valid = invalidTempFile.renameForCreateTempFile()
+        File.createTempFile(valid.fileName, valid.extensionWithDot)
+    }
+
+    @Test
+    fun `string representation is unchanged`() {
+        val underTest = getValidFileNameAndExtension("file.ext")
+        assertThat("toString()", underTest.toString(), equalTo("file.ext"))
+    }
+
+    @Test
+    fun `extension replacement dot handling`() {
+        // I felt that requiring the '.' prefix was unintuitive and would lead to errors
+        // so both the missing and valid cases are handled
+
+        val underTest = getValidFileNameAndExtension("file.ext")
+
+        assertThat("replace extension, no .", underTest.replaceExtension(extension = "file").toString(), equalTo("file.file"))
+        assertThat("replace extension, with .", underTest.replaceExtension(extension = ".file").toString(), equalTo("file.file"))
+    }
+
+    /**
+     * Allows destructuring of a [FileNameAndExtension]
+     *
+     * ```kotlin
+     * val (fileName, extension) = getValidFileNameAndExtension("a.b.c")
+     * ```
+     *
+     * Destructuring doesn't work on a `FileNameAndExtension?`
+     * */
+    private fun getValidFileNameAndExtension(input: String) =
+        assertNotNull(FileNameAndExtension.fromString(input))
 }

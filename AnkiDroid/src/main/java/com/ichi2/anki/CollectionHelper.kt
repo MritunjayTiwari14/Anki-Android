@@ -25,7 +25,6 @@ import androidx.core.content.edit
 import com.ichi2.anki.AnkiDroidFolder.AppPrivateFolder
 import com.ichi2.anki.exception.StorageAccessException
 import com.ichi2.anki.exception.UnknownDatabaseVersionException
-import com.ichi2.anki.preferences.Preferences
 import com.ichi2.anki.preferences.sharedPrefs
 import com.ichi2.libanki.Collection
 import com.ichi2.libanki.DB
@@ -47,7 +46,7 @@ object CollectionHelper {
      * This directory contains all AnkiDroid data and media for a given collection
      * Except the Android preferences, cached files and [MetaDB]
      *
-     * This can be changed by the [Preferences] screen
+     * This can be changed by the Preferences screen
      * to allow a user to access a second collection via the same AnkiDroid app instance.
      *
      * The path also defines the collection that the AnkiDroid API accesses
@@ -221,8 +220,20 @@ object CollectionHelper {
      * @param context Used to get the External App-Specific directory for AnkiDroid
      * @return Returns the absolute path to the App-Specific External AnkiDroid directory
      */
-    private fun getAppSpecificExternalAnkiDroidDirectory(context: Context): String {
-        return context.getExternalFilesDir(null)!!.absolutePath
+    private fun getAppSpecificExternalAnkiDroidDirectory(context: Context): String? {
+        val externalFilesDir = context.getExternalFilesDir(null)
+
+        // This value *may* be null but we strictly require it. This has caused NullPointerException
+        // in previous releases as we dereference. We can't recover but for purposes of triage,
+        // we will now check for null and if so try to log more information about why.
+        if (externalFilesDir == null) {
+            Timber.e("Attempting to determine collection path, but no valid external storage?")
+            throw IllegalStateException(
+                "getExternalFilesDir unexpectedly returned null. Media state: " +
+                    Environment.getExternalStorageState()
+            )
+        }
+        return externalFilesDir.absolutePath
     }
 
     /**

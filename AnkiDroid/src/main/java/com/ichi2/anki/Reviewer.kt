@@ -92,6 +92,7 @@ import com.ichi2.anki.servicelayer.NoteService.isMarked
 import com.ichi2.anki.servicelayer.NoteService.toggleMark
 import com.ichi2.anki.snackbar.showSnackbar
 import com.ichi2.anki.ui.internationalization.toSentenceCase
+import com.ichi2.anki.utils.ext.showDialogFragment
 import com.ichi2.anki.utils.navBarNeedsScrim
 import com.ichi2.anki.utils.remainingTime
 import com.ichi2.annotations.NeedsTest
@@ -251,7 +252,7 @@ open class Reviewer :
         server.stop()
     }
 
-    protected val flagToDisplay: Int
+    protected val flagToDisplay: Flag
         get() {
             return FlagToDisplay(
                 currentCard!!.userFlag(),
@@ -302,9 +303,9 @@ open class Reviewer :
             return
         }
         launchCatchingTask {
-            card.setUserFlag(flag.code)
+            card.setUserFlag(flag)
             undoableOp(this@Reviewer) {
-                setUserFlagForCards(listOf(card.id), flag.code)
+                setUserFlagForCards(listOf(card.id), flag)
             }
             refreshActionBar()
             onFlagChanged()
@@ -315,16 +316,16 @@ open class Reviewer :
         if (currentCard == null) {
             return
         }
-        cardMarker!!.displayFlag(Flag.fromCode(flagToDisplay))
+        cardMarker!!.displayFlag(flagToDisplay)
     }
 
     private fun selectDeckFromExtra() {
         val extras = intent.extras
-        if (extras == null || !extras.containsKey("deckId")) {
+        if (extras == null || !extras.containsKey(EXTRA_DECK_ID)) {
             // deckId is not set, load default
             return
         }
-        val did = extras.getLong("deckId", Long.MIN_VALUE)
+        val did = extras.getLong(EXTRA_DECK_ID, Long.MIN_VALUE)
         Timber.d("selectDeckFromExtra() with deckId = %d", did)
 
         // deckId does not exist, load default
@@ -340,7 +341,7 @@ open class Reviewer :
         return when (fullscreenMode) {
             FullScreenMode.BUTTONS_ONLY -> R.layout.reviewer_fullscreen
             FullScreenMode.FULLSCREEN_ALL_GONE -> R.layout.reviewer_fullscreen_noanswers
-            else -> R.layout.reviewer
+            FullScreenMode.BUTTONS_AND_MENU -> R.layout.reviewer
         }
     }
 
@@ -726,16 +727,7 @@ open class Reviewer :
         val flagIcon = menu.findItem(R.id.action_flag)
         if (flagIcon != null) {
             if (currentCard != null) {
-                when (currentCard!!.userFlag()) {
-                    1 -> flagIcon.setIcon(R.drawable.ic_flag_red)
-                    2 -> flagIcon.setIcon(R.drawable.ic_flag_orange)
-                    3 -> flagIcon.setIcon(R.drawable.ic_flag_green)
-                    4 -> flagIcon.setIcon(R.drawable.ic_flag_blue)
-                    5 -> flagIcon.setIcon(R.drawable.ic_flag_pink)
-                    6 -> flagIcon.setIcon(R.drawable.ic_flag_turquoise)
-                    7 -> flagIcon.setIcon(R.drawable.ic_flag_purple)
-                    else -> flagIcon.setIcon(R.drawable.ic_flag_transparent)
-                }
+                flagIcon.setIcon(currentCard!!.userFlag().drawableReviewerRes())
             }
             flagIcon.iconAlpha = alpha
         }
@@ -873,7 +865,7 @@ open class Reviewer :
     private fun setupFlags(subMenu: SubMenu) {
         lifecycleScope.launch {
             for ((flag, displayName) in Flag.queryDisplayNames()) {
-                val menuItem = subMenu.add(Menu.NONE, flag.ordinal, Menu.NONE, displayName)
+                val menuItem = subMenu.add(Menu.NONE, flag.code, Menu.NONE, displayName)
                     .setIcon(flag.drawableRes)
                 flagItemIds.add(menuItem.itemId)
             }
@@ -1064,7 +1056,7 @@ open class Reviewer :
         queueState = state
     }
 
-    override suspend fun answerCardInner(ease: Int) {
+    override suspend fun answerCardInner(ease: Ease) {
         val state = queueState!!
         Timber.d("answerCardInner: ${currentCard!!.id} $ease")
         var wasLeech = false
@@ -1073,7 +1065,7 @@ open class Reviewer :
                 wasLeech = sched.stateIsLeech(state.states.again)
             }
         }.also {
-            if (ease == Consts.BUTTON_ONE && wasLeech) {
+            if (ease == Ease.AGAIN && wasLeech) {
                 state.topCard.load(getColUnsafe)
                 val leechMessage: String = if (state.topCard.queue < 0) {
                     resources.getString(R.string.leech_suspend_notification)
@@ -1312,7 +1304,7 @@ open class Reviewer :
     }
 
     private fun toggleFlag(flag: Flag) {
-        if (currentCard!!.userFlag() == flag.code) {
+        if (currentCard!!.userFlag() == flag) {
             Timber.i("Toggle flag: unsetting flag")
             onFlag(currentCard, Flag.NONE)
         } else {
@@ -1621,6 +1613,11 @@ open class Reviewer :
     }
 
     companion object {
+        /**
+         * Bundle key for the deck id to review.
+         */
+        const val EXTRA_DECK_ID = "deckId"
+
         private const val REQUEST_AUDIO_PERMISSION = 0
         private const val ANIMATION_DURATION = 200
         private const val TRANSPARENCY = 0.90f

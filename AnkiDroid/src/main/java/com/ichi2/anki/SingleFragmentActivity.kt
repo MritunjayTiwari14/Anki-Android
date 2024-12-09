@@ -24,7 +24,10 @@ import androidx.fragment.app.FragmentContainerView
 import androidx.fragment.app.commit
 import com.ichi2.anki.android.input.ShortcutGroup
 import com.ichi2.anki.android.input.ShortcutGroupProvider
-import com.ichi2.utils.getInstanceFromClassName
+import com.ichi2.anki.dialogs.customstudy.CustomStudyDialog
+import com.ichi2.anki.dialogs.customstudy.CustomStudyDialogFactory
+import com.ichi2.utils.ExtendedFragmentFactory
+import com.ichi2.utils.FragmentFactoryUtils
 import timber.log.Timber
 import kotlin.reflect.KClass
 import kotlin.reflect.jvm.jvmName
@@ -38,14 +41,18 @@ import kotlin.reflect.jvm.jvmName
  *
  * [getIntent] can be used as an easy way to build a [SingleFragmentActivity]
  */
-open class SingleFragmentActivity : AnkiActivity() {
-    /** The displayed fragment. */
-    lateinit var fragment: Fragment
-
+open class SingleFragmentActivity : AnkiActivity(), CustomStudyDialog.CustomStudyListener {
     override fun onCreate(savedInstanceState: Bundle?) {
         if (showedActivityFailedScreen(savedInstanceState)) {
             return
         }
+
+        // This page *may* host the CustomStudyDialog (CongratsPage)
+        // CustomStudyDialog requires a custom factory install during lifecycle or it can
+        // crash during lifecycle resume after background kill
+        val customStudyDialogFactory = CustomStudyDialogFactory({ this.getColUnsafe }, this)
+        customStudyDialogFactory.attachToActivity<ExtendedFragmentFactory>(this)
+
         super.onCreate(savedInstanceState)
         if (!ensureStoragePermissions()) {
             return
@@ -55,12 +62,7 @@ open class SingleFragmentActivity : AnkiActivity() {
         // avoid recreating the fragment on configuration changes
         // the fragment should handle state restoration
         if (savedInstanceState != null) {
-            Timber.d("restoring fragment due to config changes")
-            supportFragmentManager.findFragmentById(R.id.fragment_container)?.let { fragment ->
-                this.fragment = fragment
-                return
-            }
-            Timber.w("Fragment not found after config change. Recreating it")
+            return
         }
 
         val fragmentClassName = requireNotNull(intent.getStringExtra(FRAGMENT_NAME_EXTRA)) {
@@ -69,11 +71,11 @@ open class SingleFragmentActivity : AnkiActivity() {
 
         Timber.d("Creating fragment %s", fragmentClassName)
 
-        fragment = getInstanceFromClassName<Fragment>(fragmentClassName).apply {
+        val fragment = FragmentFactoryUtils.instantiate<Fragment>(this, fragmentClassName).apply {
             arguments = intent.getBundleExtra(FRAGMENT_ARGS_EXTRA)
         }
         supportFragmentManager.commit {
-            replace(R.id.fragment_container, fragment)
+            replace(R.id.fragment_container, fragment, FRAGMENT_TAG)
         }
     }
 
@@ -86,9 +88,13 @@ open class SingleFragmentActivity : AnkiActivity() {
         }
     }
 
+    override val shortcuts: ShortcutGroup?
+        get() = (supportFragmentManager.findFragmentByTag(FRAGMENT_TAG) as? ShortcutGroupProvider)?.shortcuts
+
     companion object {
         const val FRAGMENT_NAME_EXTRA = "fragmentName"
         const val FRAGMENT_ARGS_EXTRA = "fragmentArgs"
+        const val FRAGMENT_TAG = "SingleFragmentActivityTag"
 
         fun getIntent(context: Context, fragmentClass: KClass<out Fragment>, arguments: Bundle? = null, intentAction: String? = null): Intent {
             return Intent(context, SingleFragmentActivity::class.java).apply {
@@ -99,8 +105,27 @@ open class SingleFragmentActivity : AnkiActivity() {
         }
     }
 
-    override val shortcuts: ShortcutGroup?
-        get() = (fragment as? ShortcutGroupProvider)?.shortcuts
+    // Begin - implementation of CustomStudyListener methods here for crash fix
+    // TODO - refactor https://github.com/ankidroid/Anki-Android/pull/17508#pullrequestreview-2465561993
+    private fun openStudyOptionsAndFinish() {
+        val intent = Intent(this, StudyOptionsActivity::class.java).apply {
+            putExtra("withDeckOptions", false)
+        }
+        startActivity(intent, null)
+        this.finish()
+    }
+
+    override fun onExtendStudyLimits() {
+        Timber.v("CustomStudyListener::onExtendStudyLimits()")
+        openStudyOptionsAndFinish()
+    }
+
+    override fun onCreateCustomStudySession() {
+        Timber.v("CustomStudyListener::onCreateCustomStudySession()")
+        openStudyOptionsAndFinish()
+    }
+
+    // END CustomStudyListener temporary implementation - should refactor out
 }
 
 interface DispatchKeyEventListener {

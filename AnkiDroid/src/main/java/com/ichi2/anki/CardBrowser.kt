@@ -109,7 +109,9 @@ import com.ichi2.anki.snackbar.showSnackbar
 import com.ichi2.anki.ui.BasicItemSelectedListener
 import com.ichi2.anki.ui.internationalization.toSentenceCase
 import com.ichi2.anki.utils.SECONDS_PER_DAY
+import com.ichi2.anki.utils.ext.getCurrentDialogFragment
 import com.ichi2.anki.utils.ext.ifNotZero
+import com.ichi2.anki.utils.ext.showDialogFragment
 import com.ichi2.anki.utils.roundedTimeSpanUnformatted
 import com.ichi2.anki.widgets.DeckDropDownAdapter.SubtitleListener
 import com.ichi2.annotations.NeedsTest
@@ -414,8 +416,7 @@ open class CardBrowser :
 
         // Selected cards aren't restored on activity recreation,
         // so it is necessary to dismiss the change deck dialog
-        val dialogFragment = supportFragmentManager.findFragmentByTag(DIALOG_FRAGMENT_TAG)
-        if (dialogFragment is DeckSelectionDialog) {
+        getCurrentDialogFragment<DeckSelectionDialog>()?.let { dialogFragment ->
             if (dialogFragment.requireArguments().getBoolean(CHANGE_DECK_KEY, false)) {
                 Timber.d("onCreate(): Change deck dialog dismissed")
                 dialogFragment.dismiss()
@@ -1029,7 +1030,7 @@ open class CardBrowser :
             }
 
             for ((flag, displayName) in Flag.queryDisplayNames()) {
-                subMenu.add(groupId, flag.ordinal, Menu.NONE, displayName)
+                subMenu.add(groupId, flag.code, Menu.NONE, displayName)
                     .setIcon(flag.drawableRes)
             }
         }
@@ -1562,7 +1563,7 @@ open class CardBrowser :
     }
 
     private fun showOptionsDialog() {
-        val dialog = BrowserOptionsDialog(viewModel.cardsOrNotes, viewModel.isTruncated)
+        val dialog = BrowserOptionsDialog.newInstance(viewModel.cardsOrNotes, viewModel.isTruncated)
         dialog.show(supportFragmentManager, "browserOptionsDialog")
     }
 
@@ -2161,7 +2162,7 @@ open class CardBrowser :
          */
         @ColorInt
         fun getBackgroundColor(context: Context): Int {
-            val flagColor = Flag.fromCode(card.userFlag()).browserColorRes
+            val flagColor = card.userFlag().browserColorRes
             if (flagColor != null) {
                 return context.getColor(flagColor)
             }
@@ -2175,7 +2176,7 @@ open class CardBrowser :
             return Themes.getColorFromAttr(context, colorAttr)
         }
 
-        fun getColumnHeaderText(key: CardBrowserColumn?): String? {
+        fun getColumnHeaderText(key: CardBrowserColumn): String? {
             return when (key) {
                 CardBrowserColumn.SFLD -> card.note(col).sFld(col)
                 CardBrowserColumn.DECK -> col.decks.name(card.did)
@@ -2199,7 +2200,9 @@ open class CardBrowser :
                     updateSearchItemQA()
                     qa!!.second
                 }
-                else -> null
+                CardBrowserColumn.FSRS_DIFFICULTY,
+                CardBrowserColumn.FSRS_RETRIEVABILITY,
+                CardBrowserColumn.FSRS_STABILITY -> null
             }
         }
 

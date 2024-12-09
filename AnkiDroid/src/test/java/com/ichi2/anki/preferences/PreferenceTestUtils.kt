@@ -18,16 +18,13 @@ package com.ichi2.anki.preferences
 import android.content.Context
 import androidx.annotation.XmlRes
 import androidx.fragment.app.Fragment
-import androidx.lifecycle.Lifecycle
-import androidx.test.core.app.ActivityScenario
 import com.ichi2.anki.AnkiDroidApp
 import com.ichi2.anki.R
-import com.ichi2.utils.getInstanceFromClassName
+import com.ichi2.testutils.getInstanceFromClassName
 import org.xmlpull.v1.XmlPullParser
-import java.util.concurrent.atomic.AtomicReference
 
 object PreferenceTestUtils {
-    private fun getAttrFromXml(context: Context, @XmlRes xml: Int, attrName: String, namespace: String = AnkiDroidApp.ANDROID_NAMESPACE): List<String> {
+    fun getAttrFromXml(context: Context, @XmlRes xml: Int, attrName: String, namespace: String = AnkiDroidApp.ANDROID_NAMESPACE): List<String> {
         val occurrences = mutableListOf<String>()
 
         val xrp = context.resources.getXml(xml).apply {
@@ -41,6 +38,29 @@ object PreferenceTestUtils {
                 if (attr != null) {
                     occurrences.add(attr)
                 }
+            }
+            xrp.next()
+        }
+        return occurrences.toList()
+    }
+
+    fun getAttrsFromXml(
+        context: Context,
+        @XmlRes xml: Int,
+        attrNames: List<String>,
+        namespace: String = AnkiDroidApp.ANDROID_NAMESPACE
+    ): List<Map<String, String>> {
+        val occurrences = mutableListOf<Map<String, String>>()
+
+        val xrp = context.resources.getXml(xml).apply {
+            setFeature(XmlPullParser.FEATURE_PROCESS_NAMESPACES, true)
+            setFeature(XmlPullParser.FEATURE_REPORT_NAMESPACE_ATTRIBUTES, true)
+        }
+
+        while (xrp.eventType != XmlPullParser.END_DOCUMENT) {
+            if (xrp.eventType == XmlPullParser.START_TAG) {
+                val attrValues = attrNames.associateWith { xrp.getAttributeValue(namespace, it) }
+                occurrences.add(attrValues)
             }
             xrp.next()
         }
@@ -87,18 +107,9 @@ object PreferenceTestUtils {
     }
 
     fun getAllCustomButtonKeys(context: Context): Set<String> {
-        val ret = AtomicReference<Set<String>>()
-        val i = CustomButtonsSettingsFragment.getSubscreenIntent(context)
-        ActivityScenario.launch<Preferences>(i).use { scenario ->
-            scenario.moveToState(Lifecycle.State.STARTED)
-            scenario.onActivity { a: Preferences ->
-                val customButtonsFragment = a.supportFragmentManager
-                    .findFragmentByTag(CustomButtonsSettingsFragment::class.java.name) as CustomButtonsSettingsFragment
-                ret.set(customButtonsFragment.allKeys())
-            }
-        }
-        val preferenceKeys = ret.get()?.toMutableSet() ?: throw IllegalStateException("no keys were set")
-        preferenceKeys.remove("reset_custom_buttons")
-        return preferenceKeys
+        val keys = getKeysFromXml(context, R.xml.preferences_custom_buttons).toMutableSet()
+        keys.remove("reset_custom_buttons")
+        keys.remove("appBarButtonsScreen")
+        return keys
     }
 }

@@ -90,13 +90,13 @@ import com.ichi2.anki.CollectionManager.TR
 import com.ichi2.anki.CollectionManager.withCol
 import com.ichi2.anki.CollectionManager.withOpenColOrNull
 import com.ichi2.anki.InitialActivity.StartupFailure
-import com.ichi2.anki.InitialActivity.StartupFailure.DATABASE_LOCKED
-import com.ichi2.anki.InitialActivity.StartupFailure.DB_ERROR
-import com.ichi2.anki.InitialActivity.StartupFailure.DIRECTORY_NOT_ACCESSIBLE
-import com.ichi2.anki.InitialActivity.StartupFailure.DISK_FULL
-import com.ichi2.anki.InitialActivity.StartupFailure.FUTURE_ANKIDROID_VERSION
-import com.ichi2.anki.InitialActivity.StartupFailure.SD_CARD_NOT_MOUNTED
-import com.ichi2.anki.InitialActivity.StartupFailure.WEBVIEW_FAILED
+import com.ichi2.anki.InitialActivity.StartupFailure.DBError
+import com.ichi2.anki.InitialActivity.StartupFailure.DatabaseLocked
+import com.ichi2.anki.InitialActivity.StartupFailure.DirectoryNotAccessible
+import com.ichi2.anki.InitialActivity.StartupFailure.DiskFull
+import com.ichi2.anki.InitialActivity.StartupFailure.FutureAnkidroidVersion
+import com.ichi2.anki.InitialActivity.StartupFailure.SDCardNotMounted
+import com.ichi2.anki.InitialActivity.StartupFailure.WebviewFailed
 import com.ichi2.anki.IntentHandler.Companion.intentToReviewDeckFromShorcuts
 import com.ichi2.anki.StudyOptionsFragment.StudyOptionsListener
 import com.ichi2.anki.analytics.UsageAnalytics
@@ -108,7 +108,7 @@ import com.ichi2.anki.dialogs.AsyncDialogFragment
 import com.ichi2.anki.dialogs.BackupPromptDialog
 import com.ichi2.anki.dialogs.ConfirmationDialog
 import com.ichi2.anki.dialogs.CreateDeckDialog
-import com.ichi2.anki.dialogs.DatabaseErrorDialog
+import com.ichi2.anki.dialogs.DatabaseErrorDialog.CustomExceptionData
 import com.ichi2.anki.dialogs.DatabaseErrorDialog.DatabaseErrorDialogType
 import com.ichi2.anki.dialogs.DeckPickerAnalyticsOptInDialog
 import com.ichi2.anki.dialogs.DeckPickerBackupNoSpaceLeftDialog
@@ -141,6 +141,7 @@ import com.ichi2.anki.pages.AnkiPackageImporterFragment
 import com.ichi2.anki.pages.CongratsPage
 import com.ichi2.anki.pages.CongratsPage.Companion.onDeckCompleted
 import com.ichi2.anki.preferences.AdvancedSettingsFragment
+import com.ichi2.anki.preferences.PreferencesActivity
 import com.ichi2.anki.preferences.sharedPrefs
 import com.ichi2.anki.receiver.SdCardReceiver
 import com.ichi2.anki.servicelayer.ScopedStorageService
@@ -149,6 +150,8 @@ import com.ichi2.anki.snackbar.BaseSnackbarBuilderProvider
 import com.ichi2.anki.snackbar.SnackbarBuilder
 import com.ichi2.anki.snackbar.showSnackbar
 import com.ichi2.anki.ui.windows.reviewer.ReviewerFragment
+import com.ichi2.anki.utils.ext.dismissAllDialogFragments
+import com.ichi2.anki.utils.ext.showDialogFragment
 import com.ichi2.anki.widgets.DeckAdapter
 import com.ichi2.anki.worker.SyncMediaWorker
 import com.ichi2.anki.worker.SyncWorker
@@ -181,6 +184,7 @@ import com.ichi2.utils.SyncStatus
 import com.ichi2.utils.VersionUtils
 import com.ichi2.utils.cancelable
 import com.ichi2.utils.checkBoxPrompt
+import com.ichi2.utils.checkWebviewVersion
 import com.ichi2.utils.configureView
 import com.ichi2.utils.customView
 import com.ichi2.utils.message
@@ -200,8 +204,6 @@ import net.ankiweb.rsdroid.Translations
 import org.json.JSONException
 import timber.log.Timber
 import java.io.File
-
-const val OLDEST_WORKING_WEBVIEW_VERSION = 77
 
 /**
  * The current entry point for AnkiDroid. Displays decks, allowing users to study. Many other functions.
@@ -321,8 +323,6 @@ open class DeckPicker :
      */
     @VisibleForTesting
     internal var focusedDeck: DeckId = 0
-
-    var importColpkgListener: ImportColpkgListener? = null
 
     private var toolbarSearchItem: MenuItem? = null
     private var toolbarSearchView: AccessibleSearchView? = null
@@ -572,7 +572,7 @@ open class DeckPicker :
 
         shortAnimDuration = resources.getInteger(android.R.integer.config_shortAnimTime)
 
-        InitialActivity.checkWebviewVersion(packageManager, this)
+        checkWebviewVersion(this)
 
         supportFragmentManager.setFragmentResultListener(DeckPickerContextMenu.REQUEST_KEY_CONTEXT_MENU, this) { requestKey, arguments ->
             when (requestKey) {
@@ -728,13 +728,13 @@ open class DeckPicker :
     }
 
     @VisibleForTesting
-    fun handleStartupFailure(failure: StartupFailure?) {
+    fun handleStartupFailure(failure: StartupFailure) {
         when (failure) {
-            SD_CARD_NOT_MOUNTED -> {
+            is SDCardNotMounted -> {
                 Timber.i("SD card not mounted")
                 onSdCardNotMounted()
             }
-            DIRECTORY_NOT_ACCESSIBLE -> {
+            is DirectoryNotAccessible -> {
                 Timber.i("AnkiDroid directory inaccessible")
                 if (ScopedStorageService.collectionWasMadeInaccessibleAfterUninstall(this)) {
                     showDatabaseErrorDialog(DatabaseErrorDialogType.DIALOG_STORAGE_UNAVAILABLE_AFTER_UNINSTALL)
@@ -742,15 +742,15 @@ open class DeckPicker :
                     showDirectoryNotAccessibleDialog()
                 }
             }
-            FUTURE_ANKIDROID_VERSION -> {
+            is FutureAnkidroidVersion -> {
                 Timber.i("Displaying database versioning")
                 showDatabaseErrorDialog(DatabaseErrorDialogType.INCOMPATIBLE_DB_VERSION)
             }
-            DATABASE_LOCKED -> {
+            is DatabaseLocked -> {
                 Timber.i("Displaying database locked error")
                 showDatabaseErrorDialog(DatabaseErrorDialogType.DIALOG_DB_LOCKED)
             }
-            WEBVIEW_FAILED -> AlertDialog.Builder(this).show {
+            is WebviewFailed -> AlertDialog.Builder(this).show {
                 title(R.string.ankidroid_init_failed_webview_title)
                 message(
                     text = getString(
@@ -763,8 +763,8 @@ open class DeckPicker :
                 }
                 cancelable(false)
             }
-            DISK_FULL -> displayNoStorageError()
-            DB_ERROR -> displayDatabaseFailure()
+            is DiskFull -> displayNoStorageError()
+            is DBError -> displayDatabaseFailure(CustomExceptionData.fromException(failure.exception))
             else -> displayDatabaseFailure()
         }
     }
@@ -788,16 +788,17 @@ open class DeckPicker :
                 convertDpToPixel(32F, this@DeckPicker).toInt()
             )
             positiveButton(R.string.open_settings) {
-                val settingsIntent = AdvancedSettingsFragment.getSubscreenIntent(this@DeckPicker)
+                val settingsIntent = PreferencesActivity.getIntent(this@DeckPicker, AdvancedSettingsFragment::class)
                 requestPathUpdateLauncher.launch(settingsIntent)
             }
         }
     }
 
-    private fun displayDatabaseFailure() {
+    private fun displayDatabaseFailure(exceptionData: CustomExceptionData? = null) {
         Timber.i("Displaying database failure")
-        showDatabaseErrorDialog(DatabaseErrorDialogType.DIALOG_LOAD_FAILED)
+        showDatabaseErrorDialog(DatabaseErrorDialogType.DIALOG_LOAD_FAILED, exceptionData)
     }
+
     private fun displayNoStorageError() {
         Timber.i("Displaying no storage error")
         showDatabaseErrorDialog(DatabaseErrorDialogType.DIALOG_DISK_FULL)
@@ -932,8 +933,21 @@ open class DeckPicker :
                 }
 
                 override fun onQueryTextChange(newText: String): Boolean {
-                    val adapter = recyclerView.adapter as Filterable?
-                    adapter!!.filter.filter(newText)
+                    val adapter = recyclerView.adapter as? Filterable
+                    if (adapter == null || adapter.filter == null) {
+                        Timber.w(
+                            "DeckPicker.onQueryTextChange: adapter is null: %s, filter is null: %s, adapter type: %s",
+                            adapter == null,
+                            adapter?.filter == null,
+                            adapter?.javaClass?.simpleName ?: "Unknown"
+                        )
+                        CrashReportService.sendExceptionReport(
+                            Exception("DeckPicker.onQueryTextChanged with unexpected null adapter or filter. Carefully examine logcat"),
+                            "DeckPicker"
+                        )
+                        return true
+                    }
+                    adapter.filter.filter(newText)
                     return true
                 }
             })
@@ -1443,7 +1457,7 @@ open class DeckPicker :
         val (deckName, totalCards, isFilteredDeck) = withCol {
             Triple(
                 decks.name(focusedDeck),
-                sched.cardCount(),
+                decks.cardCount(focusedDeck, includeSubdecks = true),
                 decks.isFiltered(focusedDeck)
             )
         }
@@ -1707,12 +1721,6 @@ open class DeckPicker :
         launchCatchingTask {
             undoAndShowSnackbar()
         }
-    }
-
-    // Show dialogs to deal with database loading issues etc
-    open fun showDatabaseErrorDialog(errorDialogType: DatabaseErrorDialogType) {
-        val newFragment: AsyncDialogFragment = DatabaseErrorDialog.newInstance(errorDialogType)
-        showAsyncDialogFragment(newFragment)
     }
 
     override fun showMediaCheckDialog(dialogType: Int) {
@@ -1985,20 +1993,20 @@ open class DeckPicker :
 
     private fun promptUserToUpdateScheduler() {
         AlertDialog.Builder(this).show {
-            message(text = getColUnsafe.tr.schedulingUpdateRequired())
+            message(text = TR.schedulingUpdateRequired())
             positiveButton(R.string.dialog_ok) {
                 launchCatchingTask {
                     if (!userAcceptsSchemaChange(getColUnsafe)) {
                         return@launchCatchingTask
                     }
                     withProgress { withCol { sched.upgradeToV2() } }
-                    showThemedToast(this@DeckPicker, getColUnsafe.tr.schedulingUpdateDone(), false)
+                    showThemedToast(this@DeckPicker, TR.schedulingUpdateDone(), false)
                     refreshState()
                 }
             }
             negativeButton(R.string.dialog_cancel)
             if (AdaptionUtil.hasWebBrowser(this@DeckPicker)) {
-                neutralButton(text = getColUnsafe.tr.schedulingUpdateMoreInfoButton()) {
+                neutralButton(text = TR.schedulingUpdateMoreInfoButton()) {
                     this@DeckPicker.openUrl(Uri.parse("https://faqs.ankiweb.net/the-anki-2.1-scheduler.html#updating"))
                 }
             }
@@ -2603,9 +2611,9 @@ class CollectionLoadingErrorDialog : DialogHandlerMessage(
     WhichDialogHandler.MSG_SHOW_COLLECTION_LOADING_ERROR_DIALOG,
     "CollectionLoadErrorDialog"
 ) {
-    override fun handleAsyncMessage(deckPicker: DeckPicker) {
+    override fun handleAsyncMessage(activity: AnkiActivity) {
         // Collection could not be opened
-        deckPicker.showDatabaseErrorDialog(DatabaseErrorDialogType.DIALOG_LOAD_FAILED)
+        activity.showDatabaseErrorDialog(DatabaseErrorDialogType.DIALOG_LOAD_FAILED)
     }
 
     override fun toMessage() = emptyMessage(this.what)
@@ -2615,7 +2623,7 @@ class OneWaySyncDialog(val message: String?) : DialogHandlerMessage(
     which = WhichDialogHandler.MSG_SHOW_ONE_WAY_SYNC_DIALOG,
     analyticName = "OneWaySyncDialog"
 ) {
-    override fun handleAsyncMessage(deckPicker: DeckPicker) {
+    override fun handleAsyncMessage(activity: AnkiActivity) {
         // Confirmation dialog for one-way sync
         val dialog = ConfirmationDialog()
         val confirm = Runnable {
@@ -2624,7 +2632,7 @@ class OneWaySyncDialog(val message: String?) : DialogHandlerMessage(
         }
         dialog.setConfirm(confirm)
         dialog.setArgs(message)
-        deckPicker.showDialogFragment(dialog)
+        activity.showDialogFragment(dialog)
     }
 
     override fun toMessage(): Message = Message.obtain().apply {

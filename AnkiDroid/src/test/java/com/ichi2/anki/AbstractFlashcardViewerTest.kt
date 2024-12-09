@@ -14,16 +14,10 @@ import androidx.test.filters.SdkSuppress
 import anki.config.ConfigKey
 import com.ichi2.anim.ActivityTransitionAnimation
 import com.ichi2.anki.AbstractFlashcardViewer.Companion.toAnimationTransition
-import com.ichi2.anki.AbstractFlashcardViewer.WebViewSignalParserUtils.ANSWER_ORDINAL_1
-import com.ichi2.anki.AbstractFlashcardViewer.WebViewSignalParserUtils.ANSWER_ORDINAL_2
-import com.ichi2.anki.AbstractFlashcardViewer.WebViewSignalParserUtils.ANSWER_ORDINAL_3
-import com.ichi2.anki.AbstractFlashcardViewer.WebViewSignalParserUtils.ANSWER_ORDINAL_4
-import com.ichi2.anki.AbstractFlashcardViewer.WebViewSignalParserUtils.RELINQUISH_FOCUS
-import com.ichi2.anki.AbstractFlashcardViewer.WebViewSignalParserUtils.SHOW_ANSWER
-import com.ichi2.anki.AbstractFlashcardViewer.WebViewSignalParserUtils.SIGNAL_NOOP
-import com.ichi2.anki.AbstractFlashcardViewer.WebViewSignalParserUtils.TYPE_FOCUS
-import com.ichi2.anki.AbstractFlashcardViewer.WebViewSignalParserUtils.getSignalFromUrl
+import com.ichi2.anki.AbstractFlashcardViewer.Signal
+import com.ichi2.anki.AbstractFlashcardViewer.Signal.Companion.toSignal
 import com.ichi2.anki.AnkiActivity.Companion.FINISH_ANIMATION_EXTRA
+import com.ichi2.anki.NoteEditor.Companion.NoteEditorCaller
 import com.ichi2.anki.cardviewer.Gesture
 import com.ichi2.anki.cardviewer.ViewerCommand
 import com.ichi2.anki.preferences.sharedPrefs
@@ -61,7 +55,7 @@ import com.ichi2.anim.ActivityTransitionAnimation.Direction as Direction
 @RunWith(AndroidJUnit4::class)
 class AbstractFlashcardViewerTest : RobolectricTest() {
     class NonAbstractFlashcardViewer : AbstractFlashcardViewer() {
-        var answered: Int? = null
+        var answered: Ease? = null
         private var lastTime = 0
         override fun performReload() {
             // intentionally blank
@@ -69,7 +63,7 @@ class AbstractFlashcardViewerTest : RobolectricTest() {
 
         val typedInput get() = typedInputText
 
-        override fun answerCard(ease: Int) {
+        override fun answerCard(ease: Ease) {
             super.answerCard(ease)
             answered = ease
         }
@@ -121,8 +115,8 @@ class AbstractFlashcardViewerTest : RobolectricTest() {
 
     @ParameterizedTest
     @MethodSource("getSignalFromUrlTest_args")
-    fun getSignalFromUrlTest(url: String, signal: Int) {
-        assertEquals(getSignalFromUrl(url), signal)
+    fun getSignalFromUrlTest(url: String, signal: Signal) {
+        assertEquals(url.toSignal(), signal)
     }
 
     @Test
@@ -205,7 +199,7 @@ class AbstractFlashcardViewerTest : RobolectricTest() {
 
             val animation = gesture.toAnimationTransition().invert()
             val bundle = bundleOf(
-                NoteEditor.EXTRA_CALLER to NoteEditor.CALLER_EDIT,
+                NoteEditor.EXTRA_CALLER to NoteEditorCaller.EDIT.value,
                 NoteEditor.EXTRA_CARD_ID to viewer.currentCard!!.id,
                 FINISH_ANIMATION_EXTRA to animation as Parcelable
             )
@@ -277,7 +271,7 @@ class AbstractFlashcardViewerTest : RobolectricTest() {
     fun noAutomaticAnswerAfterRenderProcessGoneAndPaused_issue9632() = runTest {
         val controller = getViewerController(addCard = true, startedWithShortcut = false)
         val viewer = controller.get()
-        viewer.automaticAnswer = AutomaticAnswer(viewer, AutomaticAnswerSettings(AutomaticAnswerAction.BURY_CARD, true, 5.0, 5.0))
+        viewer.automaticAnswer = AutomaticAnswer(viewer, AutomaticAnswerSettings(AutomaticAnswerAction.BURY_CARD, 5.0, 5.0))
         viewer.executeCommand(ViewerCommand.SHOW_ANSWER)
         assertThat("messages after flipping card", viewer.hasAutomaticAnswerQueued(), equalTo(true))
         controller.pause()
@@ -371,18 +365,16 @@ class AbstractFlashcardViewerTest : RobolectricTest() {
     }
     companion object {
         @JvmStatic // required for @MethodSource
-        fun getSignalFromUrlTest_args(): Stream<Arguments> {
-            return Stream.of(
-                Arguments.of("signal:show_answer", SHOW_ANSWER),
-                Arguments.of("signal:typefocus", TYPE_FOCUS),
-                Arguments.of("signal:relinquishFocus", RELINQUISH_FOCUS),
-                Arguments.of("signal:answer_ease1", ANSWER_ORDINAL_1),
-                Arguments.of("signal:answer_ease2", ANSWER_ORDINAL_2),
-                Arguments.of("signal:answer_ease3", ANSWER_ORDINAL_3),
-                Arguments.of("signal:answer_ease4", ANSWER_ORDINAL_4),
-                Arguments.of("signal:answer_ease0", SIGNAL_NOOP)
-            )
-        }
+        fun getSignalFromUrlTest_args() = Stream.of(
+            Arguments.of("signal:show_answer", Signal.SHOW_ANSWER),
+            Arguments.of("signal:typefocus", Signal.TYPE_FOCUS),
+            Arguments.of("signal:relinquishFocus", Signal.RELINQUISH_FOCUS),
+            Arguments.of("signal:answer_ease1", Signal.ANSWER_ORDINAL_1),
+            Arguments.of("signal:answer_ease2", Signal.ANSWER_ORDINAL_2),
+            Arguments.of("signal:answer_ease3", Signal.ANSWER_ORDINAL_3),
+            Arguments.of("signal:answer_ease4", Signal.ANSWER_ORDINAL_4),
+            Arguments.of("signal:answer_ease0", Signal.SIGNAL_NOOP)
+        )
     }
 }
 

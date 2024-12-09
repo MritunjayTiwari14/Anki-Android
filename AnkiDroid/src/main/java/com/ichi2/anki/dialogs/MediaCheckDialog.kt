@@ -13,8 +13,11 @@ import androidx.annotation.CheckResult
 import androidx.annotation.VisibleForTesting
 import androidx.appcompat.app.AlertDialog
 import androidx.core.os.bundleOf
+import com.ichi2.anki.AnkiActivity
 import com.ichi2.anki.DeckPicker
 import com.ichi2.anki.R
+import com.ichi2.anki.showError
+import com.ichi2.anki.utils.ext.dismissAllDialogFragments
 import com.ichi2.libanki.MediaCheckResult
 
 class MediaCheckDialog : AsyncDialogFragment() {
@@ -23,7 +26,6 @@ class MediaCheckDialog : AsyncDialogFragment() {
         fun showMediaCheckDialog(dialogType: Int, checkList: MediaCheckResult)
         fun mediaCheck()
         fun deleteUnused(unused: List<String>)
-        fun dismissAllDialogFragments()
     }
 
     override fun onCreateDialog(savedInstanceState: Bundle?): Dialog {
@@ -35,10 +37,10 @@ class MediaCheckDialog : AsyncDialogFragment() {
                 dialog.setMessage(notificationMessage)
                     .setPositiveButton(R.string.dialog_ok) { _, _ ->
                         (activity as MediaCheckDialogListener?)?.mediaCheck()
-                        (activity as MediaCheckDialogListener?)?.dismissAllDialogFragments()
+                        activity?.dismissAllDialogFragments()
                     }
                     .setNegativeButton(R.string.dialog_cancel) { _, _ ->
-                        (activity as MediaCheckDialogListener?)?.dismissAllDialogFragments()
+                        activity?.dismissAllDialogFragments()
                     }
                     .create()
             }
@@ -86,15 +88,15 @@ class MediaCheckDialog : AsyncDialogFragment() {
                     fileListTextView.setTextIsSelectable(true)
                     dialog.setPositiveButton(R.string.check_media_delete_unused) { _, _ ->
                         (activity as MediaCheckDialogListener?)?.deleteUnused(unused)
-                        dismissAllDialogFragments()
+                        activity?.dismissAllDialogFragments()
                     }
                         .setNegativeButton(R.string.dialog_cancel) { _, _ ->
-                            (activity as MediaCheckDialogListener?)?.dismissAllDialogFragments()
+                            activity?.dismissAllDialogFragments()
                         }
                 } else {
                     fileListTextView.visibility = View.GONE
                     dialog.setNegativeButton(R.string.dialog_ok) { _, _ ->
-                        (activity as MediaCheckDialogListener).dismissAllDialogFragments()
+                        activity?.dismissAllDialogFragments()
                     }
                 }
                 dialog.setView(dialogBody)
@@ -103,10 +105,6 @@ class MediaCheckDialog : AsyncDialogFragment() {
             }
             else -> null!!
         }
-    }
-
-    fun dismissAllDialogFragments() {
-        (activity as MediaCheckDialogListener).dismissAllDialogFragments()
     }
 
     override val notificationMessage: String
@@ -174,12 +172,22 @@ class MediaCheckDialog : AsyncDialogFragment() {
         private val unused: ArrayList<String>?,
         private val invalid: ArrayList<String>?
     ) : DialogHandlerMessage(WhichDialogHandler.MSG_SHOW_MEDIA_CHECK_COMPLETE_DIALOG, "MediaCheckCompleteDialog") {
-        override fun handleAsyncMessage(deckPicker: DeckPicker) {
+        override fun handleAsyncMessage(activity: AnkiActivity) {
             // Media check results
             val id = dialogType
             if (id != DIALOG_CONFIRM_MEDIA_CHECK) {
+                // we may be called via any AnkiActivity but media check is a DeckPicker thing
+                if (activity !is DeckPicker) {
+                    showError(
+                        activity,
+                        activity.getString(R.string.something_wrong),
+                        ClassCastException(activity.javaClass.simpleName + " is not " + DeckPicker.javaClass.simpleName),
+                        true
+                    )
+                    return
+                }
                 val checkList = MediaCheckResult(noHave ?: arrayListOf(), unused ?: arrayListOf(), invalid ?: arrayListOf())
-                deckPicker.showMediaCheckDialog(id, checkList)
+                activity.showMediaCheckDialog(id, checkList)
             }
         }
 

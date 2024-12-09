@@ -93,6 +93,8 @@
         <item quantity="one">+%d gömülü</item>
         <item quantity="other">+%d gömülü</item>
     </plurals>
+    <string name="studyoptions_total_new_label">Total new cards</string>
+    <string name="studyoptions_total_label">Total cards</string>
     <!-- Card editor -->
     <string name="cardeditor_title_edit_card" maxLength="28">Notu düzenle</string>
     <string name="discard">Vazgeç</string>
@@ -169,7 +171,6 @@
     <string name="menu__study_options" comment="Menu item that opens options for a Filtered deck (aka Cram deck, aka Custom study)">Çalışma seçenekleri</string>
     <string name="select_tts" maxLength="28">Metin okuma dilini ayarla</string>
     <string name="custom_study" maxLength="28">Kişisel çalışma</string>
-    <string name="more_options">Daha fazlası</string>
     <string name="dyn_deck_desc">Bu normal programın dışında çalışmak için özel bir deste. Kartlar çalışıldıktan sonra otomatik olarak kendi destelerine geri dönecekler. Bu desteyi deste listesinden silmek kalan bütün kartları kendi destelerine geri döndürecek.</string>
     <string name="steps_error">Adım 0\'dan büyük bir sayı olmalıdır</string>
     <string name="steps_min_error">En az bir adım gerekiyor</string>
@@ -358,6 +359,6 @@
     <string name="copy_the_template" comment="Description of the shortcut that copy the template as markdown">Şablonu markdown olarak kopyala</string>
     <string name="edit_browser_appearance" comment="Description of the shortcut that edits the browser appearance of card template">Tarayıcı görünümünü düzenle</string>
     <string name="show_shortcuts_message">Klavye kısayollarını göstermek için Alt+K\'ye basın</string>
-    <string name="missing_user_action_dialog_message" comment="%s is the user action number">User action %s is not set in this notetype. Please configure it</string>
-    <string name="directory_inaccessible_info">Learn more about how to restore access here %s or go to settings to update collection folder.</string>
+    <string name="missing_user_action_dialog_message" comment="%s is the user action number">%s kullanıcı eylemi bu not türünde belirlenmemiş. Lütfen eylemi ayarlayın</string>
+    <string name="directory_inaccessible_info">Erişimin nasıl yeniden sağlanıldığına dair daha fazlasını burda %s öğrenin ya da koleksiyon klasörünü değiştirmek için ayarlara gidin.</string>
 </resources>

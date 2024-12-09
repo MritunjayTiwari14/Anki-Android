@@ -26,8 +26,8 @@
 package com.ichi2.libanki
 
 import android.text.TextUtils
-import anki.config.ConfigKey
 import com.ichi2.anki.CollectionManager
+import com.ichi2.anki.preferences.getHidePlayAudioButtons
 import com.ichi2.compat.CompatHelper
 import com.ichi2.libanki.TemplateManager.TemplateRenderContext.TemplateRenderOutput
 import com.ichi2.libanki.utils.NotInLibAnki
@@ -84,13 +84,13 @@ data class SoundOrVideoTag(val filename: String) : AvTag() {
     }
 }
 
-/** In python, this is a union of [TTSTag] and [SoundOrVideoTag] */
-open class AvTag
-
 /**
  * [Regex] used to identify the markers for sound files
  */
 val SOUND_RE = Pattern.compile("\\[sound:([^\\[\\]]*)]").toRegex()
+
+/** In python, this is a union of [TTSTag] and [SoundOrVideoTag] */
+sealed class AvTag
 
 fun stripAvRefs(text: String, replacement: String = "") = AvRef.REGEX.replace(text, replacement)
 
@@ -180,8 +180,7 @@ object Sound {
         renderOutput: TemplateRenderOutput
     ): String {
         val mediaDir = CollectionManager.withCol { media.dir }
-        val hidePlayButtons =
-            CollectionManager.withCol { config.getBool(ConfigKey.Bool.HIDE_AUDIO_PLAY_BUTTONS) }
+        val hidePlayButtons = getHidePlayAudioButtons()
         return expandSounds(text, renderOutput, showAudioPlayButtons = !hidePlayButtons, mediaDir)
     }
 

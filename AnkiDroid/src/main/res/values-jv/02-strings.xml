@@ -92,6 +92,8 @@
     <plurals name="studyoptions_buried_count">
         <item quantity="other">+%d buried</item>
     </plurals>
+    <string name="studyoptions_total_new_label">Total new cards</string>
+    <string name="studyoptions_total_label">Total cards</string>
     <!-- Card editor -->
     <string name="cardeditor_title_edit_card" maxLength="28">Edit catatan</string>
     <string name="discard">Discard</string>
@@ -166,7 +168,6 @@
     <string name="menu__study_options" comment="Menu item that opens options for a Filtered deck (aka Cram deck, aka Custom study)">Study options</string>
     <string name="select_tts" maxLength="28">Tetapkan bahasa TTS</string>
     <string name="custom_study" maxLength="28">Kajian khusus</string>
-    <string name="more_options">Lebih</string>
     <string name="dyn_deck_desc">Ini adalah dek khusus untuk belajar di luar jadwal normal. Kartu akan otomatis dikembalikan ke deck aslinya setelah Anda memeriksanya. Menghapus dek ini dari daftar dek akan mengembalikan semua kartu yang tersisa ke dek asli mereka.</string>
     <string name="steps_error">Langkah harus angka lebih besar dari 0</string>
     <string name="steps_min_error">Setidaknya satu langkah diperlukan</string>

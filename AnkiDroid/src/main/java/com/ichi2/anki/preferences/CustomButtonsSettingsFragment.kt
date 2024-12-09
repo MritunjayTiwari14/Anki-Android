@@ -15,8 +15,6 @@
  */
 package com.ichi2.anki.preferences
 
-import android.content.Context
-import android.content.Intent
 import androidx.annotation.VisibleForTesting
 import androidx.appcompat.app.AlertDialog
 import androidx.core.content.edit
@@ -47,7 +45,9 @@ class CustomButtonsSettingsFragment : SettingsFragment() {
                         }
                     }
                     // #9263: refresh the screen to display the changes
-                    refreshScreen()
+                    preferenceScreen.removeAll()
+                    addPreferencesFromResource(preferenceResource)
+                    initSubscreen()
                 }
                 negativeButton(R.string.dialog_cancel)
             }
@@ -58,11 +58,5 @@ class CustomButtonsSettingsFragment : SettingsFragment() {
     @VisibleForTesting(otherwise = VisibleForTesting.NONE)
     fun allKeys(): HashSet<String> {
         return allPreferences().mapTo(hashSetOf()) { it.key }
-    }
-
-    companion object {
-        fun getSubscreenIntent(context: Context): Intent {
-            return getSubscreenIntent(context, CustomButtonsSettingsFragment::class)
-        }
     }
 }
