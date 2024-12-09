@@ -78,6 +78,7 @@ import anki.collection.OpChanges
 import com.drakeet.drawer.FullDraggableContainer
 import com.google.android.material.snackbar.Snackbar
 import com.ichi2.anim.ActivityTransitionAnimation
+import com.ichi2.anki.AbstractFlashcardViewer.Signal.Companion.toSignal
 import com.ichi2.anki.CollectionManager.TR
 import com.ichi2.anki.CollectionManager.withCol
 import com.ichi2.anki.cardviewer.AndroidCardRenderContext
@@ -124,6 +125,7 @@ import com.ichi2.anki.snackbar.SnackbarBuilder
 import com.ichi2.anki.snackbar.showSnackbar
 import com.ichi2.anki.utils.OnlyOnce.Method.ANSWER_CARD
 import com.ichi2.anki.utils.OnlyOnce.preventSimultaneousExecutions
+import com.ichi2.anki.utils.ext.showDialogFragment
 import com.ichi2.annotations.NeedsTest
 import com.ichi2.compat.CompatHelper.Companion.resolveActivityCompat
 import com.ichi2.compat.ResolveInfoFlagsCompat
@@ -132,7 +134,6 @@ import com.ichi2.libanki.CardId
 import com.ichi2.libanki.ChangeManager
 import com.ichi2.libanki.Collection
 import com.ichi2.libanki.Consts
-import com.ichi2.libanki.Consts.ButtonType
 import com.ichi2.libanki.DeckId
 import com.ichi2.libanki.Decks
 import com.ichi2.libanki.Sound.getAvTag
@@ -143,7 +144,6 @@ import com.ichi2.libanki.undoableOp
 import com.ichi2.themes.Themes
 import com.ichi2.themes.Themes.getResFromAttr
 import com.ichi2.ui.FixedEditText
-import com.ichi2.utils.BlocksSchemaUpgrade
 import com.ichi2.utils.ClipboardUtil.getText
 import com.ichi2.utils.HandlerUtils.executeFunctionWithDelay
 import com.ichi2.utils.HandlerUtils.newHandler
@@ -252,7 +252,7 @@ abstract class AbstractFlashcardViewer :
     private val clipboard: ClipboardManager? = null
     private var previousAnswerIndicator: PreviousAnswerIndicator? = null
 
-    private var currentEase = 0
+    private var currentEase: Ease? = null
     private var initialFlipCardHeight = 0
     private var buttonHeightSet = false
 
@@ -416,26 +416,26 @@ abstract class AbstractFlashcardViewer :
                     automaticAnswer.onSelectEase()
                     when (view.id) {
                         R.id.flashcard_layout_ease1 -> {
-                            Timber.i("AbstractFlashcardViewer:: EASE_1 pressed")
-                            answerCard(Consts.BUTTON_ONE)
+                            Timber.i("AbstractFlashcardViewer:: Ease_1 pressed")
+                            answerCard(Ease.AGAIN)
                         }
 
                         R.id.flashcard_layout_ease2 -> {
-                            Timber.i("AbstractFlashcardViewer:: EASE_2 pressed")
-                            answerCard(Consts.BUTTON_TWO)
+                            Timber.i("AbstractFlashcardViewer:: Ease_2 pressed")
+                            answerCard(Ease.HARD)
                         }
 
                         R.id.flashcard_layout_ease3 -> {
-                            Timber.i("AbstractFlashcardViewer:: EASE_3 pressed")
-                            answerCard(Consts.BUTTON_THREE)
+                            Timber.i("AbstractFlashcardViewer:: Ease_3 pressed")
+                            answerCard(Ease.GOOD)
                         }
 
                         R.id.flashcard_layout_ease4 -> {
-                            Timber.i("AbstractFlashcardViewer:: EASE_4 pressed")
-                            answerCard(Consts.BUTTON_FOUR)
+                            Timber.i("AbstractFlashcardViewer:: Ease_4 pressed")
+                            answerCard(Ease.EASY)
                         }
 
-                        else -> currentEase = 0
+                        else -> currentEase = null
                     }
                     if (!hasBeenTouched) {
                         view.isPressed = false
@@ -856,7 +856,7 @@ abstract class AbstractFlashcardViewer :
         }
     }
 
-    open fun answerCard(@ButtonType ease: Int) = preventSimultaneousExecutions(ANSWER_CARD) {
+    open fun answerCard(ease: Ease) = preventSimultaneousExecutions(ANSWER_CARD) {
         launchCatchingTask {
             if (inAnswer) {
                 return@launchCatchingTask
@@ -876,7 +876,7 @@ abstract class AbstractFlashcardViewer :
         }
     }
 
-    open suspend fun answerCardInner(@ButtonType ease: Int) {
+    open suspend fun answerCardInner(ease: Ease) {
         // Legacy tests assume they can call answerCard() even outside of Reviewer
         withCol {
             sched.answerCard(currentCard!!, ease)
@@ -897,25 +897,25 @@ abstract class AbstractFlashcardViewer :
         gestureDetector = GestureDetector(this, gestureDetectorImpl)
         easeButtonsLayout = findViewById(R.id.ease_buttons)
         easeButton1 = EaseButton(
-            EASE_1,
+            Ease.AGAIN,
             findViewById(R.id.flashcard_layout_ease1),
             findViewById(R.id.ease1),
             findViewById(R.id.nextTime1)
         ).apply { setListeners(easeHandler) }
         easeButton2 = EaseButton(
-            EASE_2,
+            Ease.HARD,
             findViewById(R.id.flashcard_layout_ease2),
             findViewById(R.id.ease2),
             findViewById(R.id.nextTime2)
         ).apply { setListeners(easeHandler) }
         easeButton3 = EaseButton(
-            EASE_3,
+            Ease.GOOD,
             findViewById(R.id.flashcard_layout_ease3),
             findViewById(R.id.ease3),
             findViewById(R.id.nextTime3)
         ).apply { setListeners(easeHandler) }
         easeButton4 = EaseButton(
-            EASE_4,
+            Ease.EASY,
             findViewById(R.id.flashcard_layout_ease4),
             findViewById(R.id.ease4),
             findViewById(R.id.nextTime4)
@@ -1059,7 +1059,7 @@ abstract class AbstractFlashcardViewer :
     }
 
     /** If a card is displaying the question, flip it, otherwise answer it  */
-    internal open fun flipOrAnswerCard(cardOrdinal: Int) {
+    internal open fun flipOrAnswerCard(cardOrdinal: Ease) {
         if (!displayAnswer) {
             displayCardAnswer()
             return
@@ -1233,8 +1233,7 @@ abstract class AbstractFlashcardViewer :
         // These are preferences we pull out of the collection instead of SharedPreferences
         try {
             showNextReviewTime = col.config.get("estTimes") ?: true
-            val preferences = baseContext.sharedPrefs()
-            automaticAnswer = AutomaticAnswer.createInstance(this, preferences, col)
+            automaticAnswer = AutomaticAnswer.createInstance(this, col)
         } catch (ex: Exception) {
             Timber.w(ex)
             onCollectionLoadError()
@@ -1624,22 +1623,22 @@ abstract class AbstractFlashcardViewer :
             }
 
             ViewerCommand.FLIP_OR_ANSWER_EASE1 -> {
-                flipOrAnswerCard(EASE_1)
+                flipOrAnswerCard(Ease.AGAIN)
                 true
             }
 
             ViewerCommand.FLIP_OR_ANSWER_EASE2 -> {
-                flipOrAnswerCard(EASE_2)
+                flipOrAnswerCard(Ease.HARD)
                 true
             }
 
             ViewerCommand.FLIP_OR_ANSWER_EASE3 -> {
-                flipOrAnswerCard(EASE_3)
+                flipOrAnswerCard(Ease.GOOD)
                 true
             }
 
             ViewerCommand.FLIP_OR_ANSWER_EASE4 -> {
-                flipOrAnswerCard(EASE_4)
+                flipOrAnswerCard(Ease.EASY)
                 true
             }
 
@@ -1731,8 +1730,29 @@ abstract class AbstractFlashcardViewer :
                 loadUrlInViewer("javascript: showAllHints();")
                 true
             }
-
-            else -> {
+            ViewerCommand.REDO,
+            ViewerCommand.MARK,
+            ViewerCommand.TOGGLE_FLAG_RED,
+            ViewerCommand.TOGGLE_FLAG_ORANGE,
+            ViewerCommand.TOGGLE_FLAG_GREEN,
+            ViewerCommand.TOGGLE_FLAG_BLUE,
+            ViewerCommand.TOGGLE_FLAG_PINK,
+            ViewerCommand.TOGGLE_FLAG_TURQUOISE,
+            ViewerCommand.TOGGLE_FLAG_PURPLE,
+            ViewerCommand.UNSET_FLAG,
+            ViewerCommand.CARD_INFO,
+            ViewerCommand.ADD_NOTE,
+            ViewerCommand.RESCHEDULE_NOTE,
+            ViewerCommand.TOGGLE_AUTO_ADVANCE,
+            ViewerCommand.USER_ACTION_1,
+            ViewerCommand.USER_ACTION_2,
+            ViewerCommand.USER_ACTION_3,
+            ViewerCommand.USER_ACTION_4,
+            ViewerCommand.USER_ACTION_5,
+            ViewerCommand.USER_ACTION_6,
+            ViewerCommand.USER_ACTION_7,
+            ViewerCommand.USER_ACTION_8,
+            ViewerCommand.USER_ACTION_9 -> {
                 Timber.w("Unknown command requested: %s", which)
                 false
             }
@@ -1793,13 +1813,13 @@ abstract class AbstractFlashcardViewer :
         }
     }
 
-    protected open fun performClickWithVisualFeedback(ease: Int) {
+    protected open fun performClickWithVisualFeedback(ease: Ease) {
         // Delay could potentially be lower - testing with 20 left a visible "click"
         when (ease) {
-            EASE_1 -> easeButton1!!.performClickWithVisualFeedback()
-            EASE_2 -> easeButton2!!.performClickWithVisualFeedback()
-            EASE_3 -> easeButton3!!.performClickWithVisualFeedback()
-            EASE_4 -> easeButton4!!.performClickWithVisualFeedback()
+            Ease.AGAIN -> easeButton1!!.performClickWithVisualFeedback()
+            Ease.HARD -> easeButton2!!.performClickWithVisualFeedback()
+            Ease.GOOD -> easeButton3!!.performClickWithVisualFeedback()
+            Ease.EASY -> easeButton4!!.performClickWithVisualFeedback()
         }
     }
 
@@ -2241,42 +2261,43 @@ abstract class AbstractFlashcardViewer :
     }
 
     /** Signals from a WebView represent actions with no parameters  */
-    @VisibleForTesting
-    internal object WebViewSignalParserUtils {
+    enum class Signal {
         /** A signal which we did not know how to handle  */
-        const val SIGNAL_UNHANDLED = 0
+        SIGNAL_UNHANDLED,
 
         /** A known signal which should perform a noop  */
-        const val SIGNAL_NOOP = 1
-        const val TYPE_FOCUS = 2
+        SIGNAL_NOOP,
+        TYPE_FOCUS,
 
         /** Tell the app that we no longer want to focus the WebView and should instead return keyboard focus to a
          * native answer input method.  */
-        const val RELINQUISH_FOCUS = 3
-        const val SHOW_ANSWER = 4
-        const val ANSWER_ORDINAL_1 = 5
-        const val ANSWER_ORDINAL_2 = 6
-        const val ANSWER_ORDINAL_3 = 7
-        const val ANSWER_ORDINAL_4 = 8
-        fun getSignalFromUrl(url: String): Int {
-            when (url) {
-                "signal:typefocus" -> return TYPE_FOCUS
-                "signal:relinquishFocus" -> return RELINQUISH_FOCUS
-                "signal:show_answer" -> return SHOW_ANSWER
-                "signal:answer_ease1" -> return ANSWER_ORDINAL_1
-                "signal:answer_ease2" -> return ANSWER_ORDINAL_2
-                "signal:answer_ease3" -> return ANSWER_ORDINAL_3
-                "signal:answer_ease4" -> return ANSWER_ORDINAL_4
-                else -> {}
+        RELINQUISH_FOCUS,
+        SHOW_ANSWER,
+        ANSWER_ORDINAL_1,
+        ANSWER_ORDINAL_2,
+        ANSWER_ORDINAL_3,
+        ANSWER_ORDINAL_4;
+
+        companion object {
+            fun String.toSignal(): Signal {
+                when (this) {
+                    "signal:typefocus" -> return TYPE_FOCUS
+                    "signal:relinquishFocus" -> return RELINQUISH_FOCUS
+                    "signal:show_answer" -> return SHOW_ANSWER
+                    "signal:answer_ease1" -> return ANSWER_ORDINAL_1
+                    "signal:answer_ease2" -> return ANSWER_ORDINAL_2
+                    "signal:answer_ease3" -> return ANSWER_ORDINAL_3
+                    "signal:answer_ease4" -> return ANSWER_ORDINAL_4
+                    else -> {}
+                }
+                if (this.startsWith("signal:answer_ease")) {
+                    Timber.w("Unhandled signal: ease value: %s", this)
+                    return SIGNAL_NOOP
+                }
+                return SIGNAL_UNHANDLED // unknown, or not a signal.
             }
-            if (url.startsWith("signal:answer_ease")) {
-                Timber.w("Unhandled signal: ease value: %s", url)
-                return SIGNAL_NOOP
-            }
-            return SIGNAL_UNHANDLED // unknown, or not a signal.
         }
     }
-
     inner class CardViewerWebClient internal constructor(
         private val resourceHandler: ViewerResourceHandler,
         private val onPageFinishedCallback: OnPageFinishedCallback? = null
@@ -2398,49 +2419,42 @@ abstract class AbstractFlashcardViewer :
                 return true
             }
 
-            when (val signalOrdinal = WebViewSignalParserUtils.getSignalFromUrl(url)) {
-                WebViewSignalParserUtils.SIGNAL_UNHANDLED -> {}
-                WebViewSignalParserUtils.SIGNAL_NOOP -> return true
-                WebViewSignalParserUtils.TYPE_FOCUS -> return true
+            when (val signalOrdinal = url.toSignal()) {
+                Signal.SIGNAL_UNHANDLED -> {}
+                Signal.SIGNAL_NOOP -> return true
+                Signal.TYPE_FOCUS -> return true
 
-                WebViewSignalParserUtils.RELINQUISH_FOCUS -> {
+                Signal.RELINQUISH_FOCUS -> {
                     // #5811 - The WebView could be focused via mouse. Allow components to return focus to Android.
                     focusAnswerCompletionField()
                     return true
                 }
 
-                WebViewSignalParserUtils.SHOW_ANSWER -> {
+                Signal.SHOW_ANSWER -> {
                     // display answer when showAnswer() called from card.js
-                    if (!Companion.displayAnswer) {
+                    if (!displayAnswer) {
                         displayCardAnswer()
                     }
                     return true
                 }
 
-                WebViewSignalParserUtils.ANSWER_ORDINAL_1 -> {
-                    flipOrAnswerCard(EASE_1)
+                Signal.ANSWER_ORDINAL_1 -> {
+                    flipOrAnswerCard(Ease.AGAIN)
                     return true
                 }
 
-                WebViewSignalParserUtils.ANSWER_ORDINAL_2 -> {
-                    flipOrAnswerCard(EASE_2)
+                Signal.ANSWER_ORDINAL_2 -> {
+                    flipOrAnswerCard(Ease.HARD)
                     return true
                 }
 
-                WebViewSignalParserUtils.ANSWER_ORDINAL_3 -> {
-                    flipOrAnswerCard(EASE_3)
+                Signal.ANSWER_ORDINAL_3 -> {
+                    flipOrAnswerCard(Ease.GOOD)
                     return true
                 }
 
-                WebViewSignalParserUtils.ANSWER_ORDINAL_4 -> {
-                    flipOrAnswerCard(EASE_4)
-                    return true
-                }
-
-                else -> {
-                    // We know it was a signal, but forgot a case in the case statement.
-                    // This is not the same as SIGNAL_UNHANDLED, where it isn't a known signal.
-                    Timber.w("Unhandled signal case: %d", signalOrdinal)
+                Signal.ANSWER_ORDINAL_4 -> {
+                    flipOrAnswerCard(Ease.EASY)
                     return true
                 }
             }
@@ -2498,7 +2512,8 @@ abstract class AbstractFlashcardViewer :
             try {
                 startActivity(intent)
             } catch (e: ActivityNotFoundException) {
-                Timber.w(e) // Don't crash if the intent is not handled
+                Timber.w("No app found to handle open external url from AbstractFlashcardViewer")
+                showSnackbar(R.string.activity_start_failed)
             }
             return true
         }
@@ -2509,13 +2524,12 @@ abstract class AbstractFlashcardViewer :
          * @param url
          */
         @NeedsTest("14221: 'playsound' should play the sound from the start")
-        @BlocksSchemaUpgrade("handle TTS tags")
         private suspend fun controlSound(url: String) {
             val avTag = when (val tag = currentCard?.let { getAvTag(it, url) }) {
                 is SoundOrVideoTag -> tag
                 is TTSTag -> tag
                 // not currently supported
-                else -> return
+                null -> return
             }
             cardMediaPlayer.playOneSound(avTag)
         }
@@ -2638,14 +2652,6 @@ abstract class AbstractFlashcardViewer :
         const val RESULT_DEFAULT = 50
         const val RESULT_NO_MORE_CARDS = 52
         const val RESULT_ABORT_AND_SYNC = 53
-
-        /**
-         * Available options performed by other activities.
-         */
-        const val EASE_1 = 1
-        const val EASE_2 = 2
-        const val EASE_3 = 3
-        const val EASE_4 = 4
 
         /**
          * Time to wait in milliseconds before resuming fullscreen mode

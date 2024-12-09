@@ -32,6 +32,7 @@ import androidx.lifecycle.viewModelScope
 import anki.collection.Progress
 import com.ichi2.anki.CollectionManager.TR
 import com.ichi2.anki.CollectionManager.withCol
+import com.ichi2.anki.exception.StorageAccessException
 import com.ichi2.anki.snackbar.showSnackbar
 import com.ichi2.libanki.Collection
 import com.ichi2.utils.message
@@ -169,8 +170,9 @@ suspend fun <T> FragmentActivity.runCatching(
                 Timber.w(exc, errorMessage)
                 exc.localizedMessage?.let { showSnackbar(it) }
             }
-            is BackendNetworkException, is BackendSyncException -> {
+            is BackendNetworkException, is BackendSyncException, is StorageAccessException -> {
                 // these exceptions do not generate worthwhile crash reports
+                Timber.i("Showing error dialog but not sending a crash report.")
                 showError(this, exc.localizedMessage!!, exc, false)
             }
             is BackendException -> {
@@ -277,6 +279,12 @@ fun showError(context: Context, msg: String, exception: Throwable, crashReport: 
     } catch (ex: BadTokenException) {
         // issue 12718: activity provided by `context` was not running
         Timber.w(ex, "unable to display error dialog")
+        if (crashReport) {
+            CrashReportService.sendExceptionReport(
+                exception,
+                origin = context::class.java.simpleName
+            )
+        }
     }
 }
 
@@ -353,7 +361,7 @@ suspend fun <T> Activity.withProgress(
 }
 
 /** @see withProgress(String, ...) */
-suspend fun <T> Fragment.withProgress(message: String, block: suspend () -> T): T =
+suspend fun <T> Fragment.withProgress(message: String = getString(R.string.dialog_processing), block: suspend () -> T): T =
     requireActivity().withProgress(message, block)
 
 /** @see withProgress(String, ...) */
@@ -377,11 +385,15 @@ suspend fun <T> withProgressDialog(
         if (manualCancelButton != null) {
             setCancelable(false)
             setButton(DialogInterface.BUTTON_NEGATIVE, context.getString(manualCancelButton)) { _, _ ->
+                Timber.i("Progress dialog cancelled via cancel button")
                 onCancel?.let { it() }
             }
         } else {
             onCancel?.let {
-                setOnCancelListener { it() }
+                setOnCancelListener {
+                    Timber.i("Progress dialog cancelled via cancel listener")
+                    it()
+                }
             }
         }
     }
@@ -392,9 +404,12 @@ suspend fun <T> withProgressDialog(
     val dialogJob = launch {
         delay(delayMillis)
         if (!AnkiDroidApp.instance.progressDialogShown) {
+            Timber.i("Displaying progress dialog: ${delayMillis}ms elapsed; cancellable: ${onCancel != null}; manualCancel: ${manualCancelButton != null}")
             dialog.show()
             AnkiDroidApp.instance.progressDialogShown = true
             dialogIsOurs = true
+        } else {
+            Timber.w("A progress dialog is already displayed, not displaying progress dialog: ${onCancel != null}; manualCancel: ${manualCancelButton != null}")
         }
     }
     try {

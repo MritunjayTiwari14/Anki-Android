@@ -1,5 +1,5 @@
 /*
- *  Copyright (c) 2021 David Allison <davidallisongithub@gmail.com>
+ *  Copyright (c) 2024 David Allison <davidallisongithub@gmail.com>
  *
  *  This program is free software; you can redistribute it and/or modify it under
  *  the terms of the GNU General Public License as published by the Free Software
@@ -14,18 +14,21 @@
  *  this program.  If not, see <http://www.gnu.org/licenses/>.
  */
 
-package com.ichi2.utils
+package com.ichi2.anki
 
-object SequenceUtil {
-    // https://stackoverflow.com/a/56059647/
-    /** Returns all values up to *and including* the first failure, even the first element, if it did not match*/
-    fun <T> Sequence<T>.takeWhileIncludingFirstNonMatch(predicate: (T) -> Boolean) = sequence {
-        with(iterator()) {
-            while (hasNext()) {
-                val next = next()
-                yield(next)
-                if (!predicate(next)) break
-            }
-        }
+import android.view.KeyEvent
+import com.ichi2.anki.android.input.Shortcut
+import org.mockito.kotlin.mock
+import kotlin.test.Test
+import kotlin.test.assertFalse
+
+class ShortcutTest {
+    val keyEventWithNoModifiers: KeyEvent = mock { }
+
+    @Test
+    fun `single number is not a shortcut hint`() {
+        assertFalse(
+            Shortcut.isPotentialShortcutCombination(keyEventWithNoModifiers, KeyEvent.KEYCODE_NUMPAD_1)
+        )
     }
 }

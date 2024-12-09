@@ -42,9 +42,7 @@ import androidx.browser.customtabs.CustomTabsIntent.COLOR_SCHEME_SYSTEM
 import androidx.core.app.NotificationCompat
 import androidx.core.app.PendingIntentCompat
 import androidx.core.content.ContextCompat
-import androidx.fragment.app.DialogFragment
 import androidx.fragment.app.Fragment
-import androidx.fragment.app.FragmentManager
 import com.google.android.material.color.MaterialColors
 import com.google.android.material.snackbar.Snackbar
 import com.ichi2.anim.ActivityTransitionAnimation
@@ -52,18 +50,21 @@ import com.ichi2.anim.ActivityTransitionAnimation.Direction
 import com.ichi2.anim.ActivityTransitionAnimation.Direction.DEFAULT
 import com.ichi2.anim.ActivityTransitionAnimation.Direction.NONE
 import com.ichi2.anki.analytics.UsageAnalytics
+import com.ichi2.anki.android.input.Shortcut
 import com.ichi2.anki.android.input.ShortcutGroup
 import com.ichi2.anki.android.input.ShortcutGroupProvider
 import com.ichi2.anki.android.input.shortcut
 import com.ichi2.anki.dialogs.AsyncDialogFragment
+import com.ichi2.anki.dialogs.DatabaseErrorDialog
+import com.ichi2.anki.dialogs.DatabaseErrorDialog.CustomExceptionData
+import com.ichi2.anki.dialogs.DatabaseErrorDialog.DatabaseErrorDialogType
 import com.ichi2.anki.dialogs.DialogHandler
 import com.ichi2.anki.dialogs.SimpleMessageDialog
-import com.ichi2.anki.dialogs.SimpleMessageDialog.SimpleMessageDialogListener
-import com.ichi2.anki.preferences.Preferences
-import com.ichi2.anki.preferences.Preferences.Companion.MINIMUM_CARDS_DUE_FOR_NOTIFICATION
+import com.ichi2.anki.preferences.PENDING_NOTIFICATIONS_ONLY
 import com.ichi2.anki.preferences.sharedPrefs
 import com.ichi2.anki.receiver.SdCardReceiver
 import com.ichi2.anki.snackbar.showSnackbar
+import com.ichi2.anki.utils.ext.showDialogFragment
 import com.ichi2.anki.workarounds.AppLoadedFromBackupWorkaround.showedActivityFailedScreen
 import com.ichi2.async.CollectionLoader
 import com.ichi2.compat.CompatHelper.Companion.registerReceiverCompat
@@ -79,7 +80,7 @@ import androidx.browser.customtabs.CustomTabsIntent.Builder as CustomTabsIntentB
 
 @UiThread
 @KotlinCleanup("set activityName")
-open class AnkiActivity : AppCompatActivity, SimpleMessageDialogListener, ShortcutGroupProvider, AnkiActivityProvider {
+open class AnkiActivity : AppCompatActivity, ShortcutGroupProvider, AnkiActivityProvider {
 
     /**
      * Receiver that informs us when a broadcast listen in [broadcastsActions] is received.
@@ -88,6 +89,8 @@ open class AnkiActivity : AppCompatActivity, SimpleMessageDialogListener, Shortc
      * @see broadcastsActions
      */
     private var broadcastReceiver: BroadcastReceiver? = null
+
+    var importColpkgListener: ImportColpkgListener? = null
 
     /** The name of the parent class (example: 'Reviewer')  */
     private val activityName: String
@@ -452,18 +455,6 @@ open class AnkiActivity : AppCompatActivity, SimpleMessageDialogListener, Shortc
         }
 
     /**
-     * Global method to show dialog fragment including adding it to back stack Note: DO NOT call this from an async
-     * task! If you need to show a dialog from an async task, use showAsyncDialogFragment()
-     *
-     * @param newFragment  the DialogFragment you want to show
-     */
-    open fun showDialogFragment(newFragment: DialogFragment) {
-        runOnUiThread {
-            showDialogFragment(this, newFragment)
-        }
-    }
-
-    /**
      * Calls [.showAsyncDialogFragment] internally, using the channel
      * [Channel.GENERAL]
      *
@@ -523,8 +514,8 @@ open class AnkiActivity : AppCompatActivity, SimpleMessageDialogListener, Shortc
     ) {
         val prefs = this.sharedPrefs()
         // Show a notification unless all notifications have been totally disabled
-        if (prefs.getString(MINIMUM_CARDS_DUE_FOR_NOTIFICATION, "0")!!
-            .toInt() <= Preferences.PENDING_NOTIFICATIONS_ONLY
+        if (prefs.getString(getString(R.string.pref_notifications_minimum_cards_due_key), "0")!!
+            .toInt() <= PENDING_NOTIFICATIONS_ONLY
         ) {
             // Use the title as the ticker unless the title is simply "AnkiDroid"
             val ticker: String? = if (title == resources.getString(R.string.app_name)) {
@@ -568,22 +559,10 @@ open class AnkiActivity : AppCompatActivity, SimpleMessageDialogListener, Shortc
         }
     }
 
-    // Handle closing simple message dialog
-    override fun dismissSimpleMessageDialog(reload: Boolean) {
-        dismissAllDialogFragments()
-        if (reload) {
-            val deckPicker = Intent(this, DeckPicker::class.java)
-            deckPicker.addFlags(Intent.FLAG_ACTIVITY_CLEAR_TOP or Intent.FLAG_ACTIVITY_NEW_TASK)
-            startActivity(deckPicker)
-        }
-    }
-
-    // Dismiss whatever dialog is showing
-    fun dismissAllDialogFragments() {
-        supportFragmentManager.popBackStack(
-            DIALOG_FRAGMENT_TAG,
-            FragmentManager.POP_BACK_STACK_INCLUSIVE
-        )
+    // Show dialogs to deal with database loading issues etc
+    open fun showDatabaseErrorDialog(errorDialogType: DatabaseErrorDialogType, exceptionData: CustomExceptionData? = null) {
+        val newFragment: AsyncDialogFragment = DatabaseErrorDialog.newInstance(errorDialogType, exceptionData)
+        showAsyncDialogFragment(newFragment)
     }
 
     /**
@@ -677,8 +656,10 @@ open class AnkiActivity : AppCompatActivity, SimpleMessageDialogListener, Shortc
 
         val done = super.onKeyUp(keyCode, event)
 
-        // Show snackbar only if the current activity have shortcuts, a modifier key is pressed and the keyCode is an unmapped alphabet key
-        if (!done && shortcuts != null && (event.isCtrlPressed || event.isAltPressed || event.isMetaPressed) && (keyCode in KeyEvent.KEYCODE_A..KeyEvent.KEYCODE_Z) || (keyCode in KeyEvent.KEYCODE_NUMPAD_0..KeyEvent.KEYCODE_NUMPAD_9)) {
+        if (done || shortcuts == null) return false
+
+        // Show snackbar only if the current activity have shortcuts, a modifier key is pressed and the keyCode is an unmapped alphabet or num key
+        if (Shortcut.isPotentialShortcutCombination(event, keyCode)) {
             showSnackbar(R.string.show_shortcuts_message, Snackbar.LENGTH_SHORT)
             return true
         }
@@ -706,29 +687,9 @@ open class AnkiActivity : AppCompatActivity, SimpleMessageDialogListener, Shortc
         get(): ShortcutGroup? = null
 
     companion object {
-        const val DIALOG_FRAGMENT_TAG = "dialog"
 
         /** Extra key to set the finish animation of an activity  */
         const val FINISH_ANIMATION_EXTRA = "finishAnimation"
-
-        fun showDialogFragment(activity: AnkiActivity, newFragment: DialogFragment) {
-            showDialogFragment(activity.supportFragmentManager, newFragment)
-        }
-
-        fun showDialogFragment(manager: FragmentManager, newFragment: DialogFragment) {
-            // DialogFragment.show() will take care of adding the fragment
-            // in a transaction. We also want to remove any currently showing
-            // dialog, so make our own transaction and take care of that here.
-            val ft = manager.beginTransaction()
-            val prev = manager.findFragmentByTag(DIALOG_FRAGMENT_TAG)
-            if (prev != null) {
-                ft.remove(prev)
-            }
-            // save transaction to the back stack
-            ft.addToBackStack(DIALOG_FRAGMENT_TAG)
-            newFragment.show(ft, DIALOG_FRAGMENT_TAG)
-            manager.executePendingTransactions()
-        }
 
         private const val SIMPLE_NOTIFICATION_ID = 0
     }

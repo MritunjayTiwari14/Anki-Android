@@ -23,6 +23,7 @@ import android.os.Bundle
 import android.view.Menu
 import android.view.MenuItem
 import android.webkit.CookieManager
+import android.webkit.URLUtil
 import android.webkit.WebResourceError
 import android.webkit.WebResourceRequest
 import android.webkit.WebResourceResponse
@@ -37,8 +38,10 @@ import com.google.android.material.snackbar.BaseTransientBottomBar.LENGTH_INDEFI
 import com.ichi2.anki.snackbar.showSnackbar
 import com.ichi2.annotations.NeedsTest
 import com.ichi2.ui.AccessibleSearchView
+import com.ichi2.utils.FileNameAndExtension
 import timber.log.Timber
 import java.io.Serializable
+import kotlin.random.Random
 
 /**
  * Browse AnkiWeb shared decks with the functionality to download and import them.
@@ -211,11 +214,14 @@ class SharedDecksActivity : AnkiActivity() {
         webView.loadUrl(resources.getString(R.string.shared_decks_url))
         webView.webViewClient = WebViewClient()
         webView.setDownloadListener { url, userAgent, contentDisposition, mimetype, _ ->
-            val sharedDecksDownloadFragment = SharedDecksDownloadFragment()
-            sharedDecksDownloadFragment.arguments = bundleOf(DOWNLOAD_FILE to DownloadFile(url, userAgent, contentDisposition, mimetype))
-
-            supportFragmentManager.commit {
-                add(R.id.shared_decks_fragment_container, sharedDecksDownloadFragment, SHARED_DECKS_DOWNLOAD_FRAGMENT).addToBackStack(null)
+            // If the activity/fragment lifecycle has already begun teardown process,
+            // avoid handling the download, as FragmentManager.commit will throw
+            if (!supportFragmentManager.isStateSaved) {
+                val sharedDecksDownloadFragment = SharedDecksDownloadFragment()
+                sharedDecksDownloadFragment.arguments = bundleOf(DOWNLOAD_FILE to DownloadFile(url, userAgent, contentDisposition, mimetype))
+                supportFragmentManager.commit {
+                    add(R.id.shared_decks_fragment_container, sharedDecksDownloadFragment, SHARED_DECKS_DOWNLOAD_FRAGMENT).addToBackStack(null)
+                }
             }
         }
 
@@ -302,4 +308,22 @@ data class DownloadFile(
     val userAgent: String,
     val contentDisposition: String,
     val mimeType: String
-) : Serializable
+) : Serializable {
+    /** @return a filename with the provided extension */
+    fun toFileName(extension: String): String = URLUtil.guessFileName(
+        this.url,
+        this.contentDisposition,
+        this.mimeType
+    ).let { maybeCorruptFileName ->
+        // #17573: https://issuetracker.google.com/issues/382864232
+        // guessFileName may return ".bin" as an extension
+        (
+            FileNameAndExtension.fromString(maybeCorruptFileName)
+                // default if maybeCorruptFileName doesn't contain a '.'
+                // Add randomness to avoid file name conflicts between different decks
+                ?: FileNameAndExtension.fromString("download-${Random.nextInt()}$extension")!!
+            )
+            .replaceExtension(extension = extension) // enforce the provided extension
+            .toString()
+    }
+}

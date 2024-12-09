@@ -13,13 +13,14 @@ import androidx.core.content.pm.ShortcutManagerCompat
 import androidx.core.view.children
 import androidx.fragment.app.FragmentManager
 import androidx.test.core.app.ActivityScenario
-import com.ichi2.anki.AbstractFlashcardViewer.Companion.EASE_4
+import com.ichi2.anki.dialogs.DatabaseErrorDialog
 import com.ichi2.anki.dialogs.DatabaseErrorDialog.DatabaseErrorDialogType
 import com.ichi2.anki.dialogs.DeckPickerContextMenu
 import com.ichi2.anki.dialogs.DeckPickerContextMenu.DeckPickerContextMenuOption
 import com.ichi2.anki.dialogs.utils.title
 import com.ichi2.anki.exception.UnknownDatabaseVersionException
 import com.ichi2.anki.preferences.sharedPrefs
+import com.ichi2.anki.utils.ext.dismissAllDialogFragments
 import com.ichi2.annotations.NeedsTest
 import com.ichi2.libanki.DeckId
 import com.ichi2.libanki.Storage
@@ -210,7 +211,7 @@ class DeckPickerTest : RobolectricTest() {
     fun databaseLockedTest() {
         // don't call .onCreate
         val deckPicker = Robolectric.buildActivity(DeckPickerEx::class.java, Intent()).get()
-        deckPicker.handleStartupFailure(InitialActivity.StartupFailure.DATABASE_LOCKED)
+        deckPicker.handleStartupFailure(InitialActivity.StartupFailure.DatabaseLocked)
         assertThat(
             deckPicker.databaseErrorDialog,
             equalTo(DatabaseErrorDialogType.DIALOG_DB_LOCKED)
@@ -670,7 +671,7 @@ class DeckPickerTest : RobolectricTest() {
         // Answer 'Easy' for one of the cards, burying the other
         col.decks.select(deckWithCards)
         col.sched.deckDueTree() // ? if not called, decks.select(toSelect) un-buries a card
-        col.sched.answerCard(col.sched.card!!, EASE_4)
+        col.sched.answerCard(col.sched.card!!, Ease.EASY)
         assertThat("the other card is buried", col.sched.card, nullValue())
 
         // select a deck with no cards
@@ -746,7 +747,7 @@ class DeckPickerTest : RobolectricTest() {
         var displayedAnalyticsOptIn = false
         var optionsMenu: Menu? = null
 
-        override fun showDatabaseErrorDialog(errorDialogType: DatabaseErrorDialogType) {
+        override fun showDatabaseErrorDialog(errorDialogType: DatabaseErrorDialogType, exceptionData: DatabaseErrorDialog.CustomExceptionData?) {
             databaseErrorDialog = errorDialogType
         }
 

@@ -93,6 +93,8 @@
         <item quantity="one">+%d buried</item>
         <item quantity="other">+%d buried</item>
     </plurals>
+    <string name="studyoptions_total_new_label">Total new cards</string>
+    <string name="studyoptions_total_label">Total cards</string>
     <!-- Card editor -->
     <string name="cardeditor_title_edit_card" maxLength="28">ಟಿಪ್ಪಣಿಯನ್ನು ಮಾರ್ಪಡಿಸಿ</string>
     <string name="discard">ಧ್ವಜಗಳು</string>
@@ -169,7 +171,6 @@
     <string name="menu__study_options" comment="Menu item that opens options for a Filtered deck (aka Cram deck, aka Custom study)">ಅಧ್ಯಯನ ಆಯ್ಕೆಗಳು</string>
     <string name="select_tts" maxLength="28">TTS ಭಾಷೆಯನ್ನು ಹೊಂದಿಸಿ</string>
     <string name="custom_study" maxLength="28">ಕಸ್ಟಮ್ ಅಧ್ಯಯನ</string>
-    <string name="more_options">ಹೆಚ್ಚು</string>
     <string name="dyn_deck_desc">ಸಾಮಾನ್ಯ ವೇಳಾಪಟ್ಟಿಯ ಹೊರಗೆ ಅಧ್ಯಯನ ಮಾಡಲು ಇದು ವಿಶೇಷ ಡೆಕ್ ಆಗಿದೆ. ನೀವು ಅವುಗಳನ್ನು ಪರಿಶೀಲಿಸಿದ ನಂತರ ಕಾರ್ಡ್‌ಗಳನ್ನು ಸ್ವಯಂಚಾಲಿತವಾಗಿ ಅವುಗಳ ಮೂಲ ಡೆಕ್‌ಗಳಿಗೆ ಹಿಂತಿರುಗಿಸಲಾಗುತ್ತದೆ. ಡೆಕ್ ಪಟ್ಟಿಯಿಂದ ಈ ಡೆಕ್ ಅನ್ನು ಅಳಿಸುವುದರಿಂದ ಉಳಿದ ಎಲ್ಲಾ ಕಾರ್ಡ್‌ಗಳನ್ನು ಅವುಗಳ ಮೂಲ ಡೆಕ್‌ಗೆ ಹಿಂತಿರುಗಿಸುತ್ತದೆ.</string>
     <string name="steps_error">ಹಂತಗಳು 0 ಕ್ಕಿಂತ ಹೆಚ್ಚಿನ ಸಂಖ್ಯೆಯಾಗಿರಬೇಕು</string>
     <string name="steps_min_error">ಕನಿಷ್ಠ ಒಂದು ಹೆಜ್ಜೆ ಅಗತ್ಯವಿದೆ</string>
